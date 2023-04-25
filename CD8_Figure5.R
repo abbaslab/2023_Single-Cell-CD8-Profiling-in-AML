@@ -10,8 +10,8 @@ library(GSVA); library(survminer); library(survival)
 library(Seurat); library(stringr)
 library(ComplexHeatmap)
 
-file_prefix <- "~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/CD8_paper/"
-source(paste0(file_prefix,"Code/CD8_Functions.R"))
+file_prefix <- ""
+source(paste0(file_prefix,"CD8_Functions.R"))
 cd8 <- readRDS(paste0(file_prefix,"cd8.rds"))
 
 cd8_derived_sig <- c("RPL41", "MTRNR2L12", "TXNIP", "CD2", "PRF1", "PSMB9", "LIMD2", "LTB", "GIMAP1", "GIMAP4", 
@@ -106,7 +106,6 @@ coxph(Surv(OS.time2, OS==1) ~ dys2, data = tcga_meta)
 
 tcga_meta$age_group <- ifelse(tcga_meta$Age > 60, "Greater", "Less")
 tcga_meta$age_group <- factor(tcga_meta$age_group, levels=c("Less", "Greater"))
-#cancer_survival$cyto.risk <- tcga_meta[match(cancer_survival$bcr_patient_barcode, tcga_meta$Sample)]
 tcga_meta$Cytogenetic_risk_incomplete=factor(tcga_meta$Cytogenetic_risk_incomplete,levels = c("Favorable","Intermediate","Unfavorable" ))
 
 covariate_names <- c(`age_group:Greater` ="Age > 60", Cytogenetic_risk_incomplete="Risk Level", dys_norm="CD8-Derived Score", 

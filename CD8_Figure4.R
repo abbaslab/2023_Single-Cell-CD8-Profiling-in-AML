@@ -11,13 +11,13 @@ library(ggVennDiagram); library(fgsea)
 library(enrichR); library(stringr); library(msigdbr)
 library(patchwork); library(ComplexHeatmap)
 
-file_prefix <- "~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/CD8_paper/"
-source(paste0(file_prefix,"Code/CD8_Functions.R"))
+file_prefix <- ""
+source(paste0(file_prefix,"CD8_Functions.R"))
 cd8 <- readRDS(paste0(file_prefix,"cd8.rds"))
 
 ########## Preliminary Analysis #########
 Idents(cd8) <- cd8$class13
-#Differences in CTL, NKT, EM
+#Differences in CTL, NK-like, EM
 ctl_markers <- FindMarkers(cd8, ident.1 = "CTL1", ident.2 = "CTL2", logfc.threshold = 0)
 
 ctl_frame <- ctl_markers %>% mutate(Expression = case_when(avg_log2FC >= log(2) & p_val_adj <= 0.05 ~ "Upregulated",

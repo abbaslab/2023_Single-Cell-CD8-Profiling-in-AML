@@ -6,9 +6,10 @@
 ## Notes: 
 ############################################
 
-file_prefix <- "~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/CD8_paper/"
+#Directory where the CD8 T cell analysis is saved
+file_prefix <- ""
 
-source(paste0(file_prefix,"Code/CD8_Functions.R"))
+source(paste0(file_prefix,"CD8_Functions.R"))
 cd8 <- readRDS("cd8.rds")
 
 ########## B: Oncoprint #########
