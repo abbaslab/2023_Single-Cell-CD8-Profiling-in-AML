@@ -12,17 +12,17 @@ library(data.table); library(stringr)
 library(circlize); library(scales)
 library(Seurat)
 
-setwd("~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/")
-source("CD8_Functions.R")
-cd8 <- readRDS("./20220912_cd8.rds")
+file_prefix <- "~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/CD8_paper/"
 
-########## Preliminary Analysis ##########
-setwd("~/Documents/T_cells/")
+source(paste0(file_prefix,"Code/CD8_Functions.R"))
+cd8 <- readRDS(file_prefix,"cd8.rds")
+
+#Preliminary Analysis that was done with the raw TCR data for viewing
+#Data for CD8 is provived on Row
 tcr_list <- list()
 for (i in patient_levels){
   tcr_list[[i]] <- read.csv(paste0("./TCR/",i,".csv"))
   }
-setwd("~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/")
 
 for(patient in names(tcr_list)){
   if (startsWith(patient, "NLBM")){tcr_list[[patient]]$barcode <- paste0(patient, "_",tcr_list[[patient]]$barcode)}
@@ -79,40 +79,40 @@ colorblind_vector <- colorRampPalette(rev(c("#0D0887FF", "#47039FFF",
                                             "#7301A8FF", "#9C179EFF", "#BD3786FF", "#D8576BFF",
                                             "#ED7953FF","#FA9E3BFF", "#FDC926FF", "#F0F921FF")))
 
+tcr_dt_cd8 <- read.table("tcr_dt_cd8.csv", row.names = TRUE)
 
-########## A: Alpha Diversity Curve ##########
+#Need to add the TCR information to the cd8 object
+
+#Alpha Diversity Curve
 type_curve <- alphaDiversity(data.frame(tcr_dt_cd8[,c("barcode", "raw_clonotype_id", "type")]), 
                              group="type", clone="raw_clonotype_id")
 pdf("./Figures/Figure6/alpha_diversity.pdf", height=3,width=4)
 plot(type_curve, colors=anno_colors$type)
 dev.off()
 
-########## B: Rank Abundance #########
+#Rank Abundance
 abundance <- estimateAbundance(data.frame(tcr_dt_cd8[,c("barcode", "raw_clonotype_id", "type")]), 
                                clone="raw_clonotype_id", group="type")
 pdf("./Figures/Figure6/rank_aubndance.pdf", height=3, width=4)
 plot(abundance, legend_title="Type",xlim=c(1,150), colors=anno_colors$type)
 dev.off()
 
-########## C: Expansion Stacked Bar Plot ##########
+#Expansion Stacked Bar Plot
 cd8_tcr_df <- cd8@meta.data[c("type","cloneType")]
 cd8_tcr_df <- cd8_tcr_df[complete.cases(cd8_tcr_df$cloneType),]
 
 CT_type <- table(cd8_tcr_df$type, cd8_tcr_df$cloneType)
 CT_type <- as.data.frame(CT_type/rowSums(CT_type))
-#CT_type_melt <- melt(CT_type)
 
 pdf("./Figures/Figure6/expansion_stacked_bar.pdf", width=2, height=4)
 ggbarplot(CT_type, x="Var1", y="Freq", fill="Var2", color="Var2", palette=colorblind_vector(5)) + 
   theme(legend.position = "none", axis.text.x=element_text(angle=90)) + xlab(NULL) + ylab("Percent")
 dev.off()
 
-#use similar strategy to the boxplot for cd8 cluster percentage
-#need the dataframe with ALL cells not just the summary table!!!!
 wilcox_stat <- CT_type %>% group_by(Var2) %>% pairwise_wilcox_test(Freq~Var1, p.adjust.method = "BH") %>% 
   add_significance("p.adj")
 
-########## D: Clonal Expansion UMAP ##########
+#Clonal Expansion UMAP
 pdf("./Figures/Figure6/expansion_umap.pdf", width=8, height=2.5)
 DimPlot(cd8, group.by = "cloneType", shuffle=T, split.by="type") +
   scale_color_manual(values = colorblind_vector(5), na.value="grey") + theme_classic() + 
@@ -123,7 +123,7 @@ df <- data.frame(FetchData(cd8, c("type", "cloneType")))
 k <- kruskal.test(cloneType ~ type, data=df)
 p.adjust(k$p.value)
 
-########## E: CD8-Score/Expansion Density Plot ##########
+#CD8-Score/Expansion Density Plot
 
 pdf("./Figures/Figure6/expansion_density.pdf")
 ggplot(cd8@meta.data, aes(x=score, fill=cloneType)) + geom_density(alpha=0.4) + theme_classic() +
@@ -135,7 +135,7 @@ df <- data.frame(FetchData(cd8, c("score", "cloneType")))
 k <- kruskal.test(cloneType ~ score, data=df)
 p.adjust(k$p.value)
 
-########## F: Circos Plot ##########
+#Circos Plot
 library(circlize); library(scRepertoire)
 cd8$class13 <- factor(cd8$class13, levels=c(c("N", "Mem1", "Mem2","EM1", "EM2", "INF1", "INF2", 
                                               "CTL1", "CTL2", "CTL INF1", "CTL INF2", "CTL INF3", 
@@ -165,7 +165,7 @@ circlize::chordDiagram(circles1,self.link = 1, grid.col=anno_colors$class13, col
                        direction.type = "arrows",  link.arr.type = "big.arrow", link.sort = TRUE, link.decreasing = TRUE)
 dev.off()
 
-########## G: Cluster Overlap by Type ##########
+#Cluster Overlap by Type
 
 #clonal overlap
 cH <- expression2List(cd8_healthy, split.by = "class13")
@@ -192,7 +192,7 @@ clonalOverlap(cH, cloneCall="aa", method="morisita") + clonalOverlap(cN, cloneCa
 dev.off()
 
 
-########## I: STARTRAC analysis ##########
+#STARTRAC analysis
 Idents(cd8) <- cd8$class13
 startrac <- StartracDiversity(cd8, 
                               type = "type", 
@@ -228,3 +228,48 @@ dev.off()
 
 k <- kruskal.test(value ~ type, data=melted)
 p.adjust(k$p.value)
+
+
+pdf("./Figures/Additional/TCR/tcr_umap.pdf", width=5,height=4)
+DimPlot(cd8, group.by="TCR_productivity", label=FALSE, cols=c("firebrick1", "steelblue3")) + ggtitle(NULL) & NoAxes()
+dev.off()
+
+#used scRepertoire for this step to get a combined file
+
+tcr_list <- list()
+for (i in patient_levels){tcr_list[[i]] <- read.csv(paste0("./TCR/",i,".csv"))}
+
+combined <- combineTCR(tcr_list, samples= patient_levels,ID=sample_type, cells="T-AB")
+names(combined) <- patient_levels
+combined <- addVariable(combined, name="type", variables=type)
+cd8_barcodes <- cd8$barcode[(cd8$barcode)]
+
+for(i in patient_levels){
+  if (startsWith(i, "NLBM")){barcodes_i <- cd8_barcodes[startsWith(cd8_barcodes,i)]}
+  else{barcodes_i <- cd8_barcodes[startsWith(cd8_barcodes,paste0(i,"A"))]}
+  barcode_split<-unlist(str_split(cd8_barcodes, "_"))
+  barcode_split <- barcode_split[seq(2,2*length(cd8_barcodes),by=2)]
+  barcode_keep <- str_extract(combined[[i]]$barcode, paste(barcode_split, collapse='|'))
+  barcode_keep <- complete.cases(barcode_keep)
+  combined[[i]] <- combined[[i]][barcode_keep,]
+}
+str_extract(combined$NLBM4$barcode, paste(barcode_split, collapse='|'))
+
+pdf("./Figures/Additional/TCR/num_unique_patient.pdf", height=4,width=4)
+quantContig(combined, cloneCall="gene+nt", scale = F) + theme(axis.text.x = element_text(angle=90, size=7)) + 
+  NoLegend()
+dev.off()
+
+pdf("./Figures/Additional/clonetype_patient.pdf", height=4, width=6)
+clonalHomeostasis(combined, cloneCall = "gene", 
+                  cloneTypes = c(Rare = 1e-04, 
+                                 Small = 0.001, 
+                                 Medium = 0.01, 
+                                 Large = 0.1, 
+                                 Hyperexpanded = 1)) + theme(axis.text.x = element_text(angle=90, size=6))
+dev.off() 
+
+pdf("./Figures/Additional/pct_unique_class13.pdf", width=4,height=4)
+quantContig(combined2, cloneCall="gene+nt", scale = T) + theme(axis.text.x = element_text(angle=90)) +
+  scale_fill_manual(values=anno_colors$class13) + NoLegend() + scale_x_discrete(limits=class13_names)
+dev.off()

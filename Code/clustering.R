@@ -1,17 +1,81 @@
 ############################################
 ## Project: CD8+ T-cell Analysis
-## Script Purpose: Code for Figure 2
+## Script Purpose: Code for cluster figure generation
 ## Date: 8/26/2022
 ## Author: Poonam Desai, Hussein Abbas
-## Notes: 
+## Notes: file_prefix should be the input/output directory
 ############################################
 
-file_prefix <- ""
-source(paste0(file_prefix,"CD8_Functions.R"))
-cd8 <- readRDS("cd8.rds")
-library(miloR); library(patchwork)
+file_prefix <- "~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/CD8_paper/"
 
-########## A: Dot Plot All Clusters ##########
+source(paste0(file_prefix,"Code/CD8_Functions.R"))
+cd8 <- readRDS(file_prefix,"cd8.rds")
+
+#Group UMAP
+pdf(paste0(file_prefix,"group_umap.pdf"), width=4,height=4)
+DimPlot(cd8, group.by="group", cols=anno_colors$group, label=TRUE, label.box = TRUE, label.size = 3) + ggtitle(NULL) & NoLegend() & NoAxes()
+dev.off()
+
+#All Clusters UMAP
+pdf(paste0(file_prefix,"class13_umap.pdf"), width=3, height=3)
+DimPlot(cd8, group.by="class13", cols=anno_colors$class13, label=FALSE) + ggtitle(NULL) & NoLegend() & NoAxes()
+dev.off()
+
+#Group Dot Plot
+can_markers <- c("CCR7", "LEF1", "SELL", "IL7R", "LTB", "GZMB", "GNLY", "PRF1", "NKG7", "GZMK", 
+                 "PDCD1", "LAG3", "TIGIT", "SLC4A10", "TRAV1-2")
+
+pdf(paste0(file_prefix,"canonical_group_dot_plot.pdf"), height=4, width=2.5)
+dot_plot_x(cd8, rev(can_markers), group = "group")
+dev.off()
+
+#Group Distribution by Patient Type
+group_type_df <- as.data.frame(table(cd8$group, cd8$type))
+kruskal.test(Freq~Var1, data=group_type_df)
+
+pdf(paste0(file_prefix,"group_stacked_bar.pdf"), width=3, height=4)
+ggplot(cd8@meta.data, aes(x=type, fill=group, color=group)) + geom_bar(position = position_fill(reverse = TRUE), alpha=0.8, width=0.5) + 
+  theme_classic() + scale_fill_manual(values=group.colors, name= "Cell Types") + scale_color_manual(values=anno_colors$group, name= "Cell Types") +
+  theme( axis.text.x = element_text(size=10, angle=90), plot.title = element_text(size = 10, face = "bold", hjust = 0.5)) +
+  labs(x=NULL, y="Percent")
+dev.off()
+
+
+#Pie Chart
+group <- data.frame(table(cd8$group))
+colnames(group) <- c("cluster", "n")
+group$cluster <- factor(group$cluster)
+group$prop<-round(group$n/sum(group$n)*100,2)
+group <- group %>% arrange(cluster,dplyr::desc(n)) %>% mutate(lab.ypos=100-(cumsum(prop)-0.5*prop))
+
+pdf(paste0(file_prefix,"group_pie_chart.pdf"), height=3, width=3)
+ggplot(group, aes(x = "", y = prop, fill = cluster)) + geom_bar(width = 1, stat = "identity", color = "white") + 
+  scale_fill_manual(values = anno_colors$group)  + geom_label_repel(aes(label=prop, y=lab.ypos), size=3, show.legend = F) + 
+  coord_polar("y")  + theme_void() + theme(legend.position = "none")
+dev.off()
+
+#Groups by Patient Pie Chart
+a <- data.frame(table(cd8$group, cd8$Patient))
+pdf(paste0(file_prefix,"cd8_patient_group_pie.pdf", width=9, height=9))
+ggplot(data=a, aes(x=1, y=Freq,fill=Var1, color=Var1)) + 
+  scale_fill_manual(values=anno_colors$group) + 
+  scale_color_manual(values = anno_colors$group) +
+  geom_col(position='fill', color="white") + coord_polar(theta="y", start = 0) +
+  facet_wrap(.~ Var2) + 
+  theme_void()
+dev.off()
+
+#Cluster Membership by Patient Type/Group
+pdf(paste0(file_prefix,"group_cluster_membership.pdf", width=3, height=3))
+cluster_membership(cd8$type, cd8$group)
+dev.off()
+
+#Cluster Membership by Patient Type/Cluster
+pdf(paste0(file_prefix,"type_cluster_membership.pdf", width=3, height=3))
+cluster_membership(cd8$type, cd8$class13)
+dev.off()
+
+#Dot Plot All Clusters
 feat_naive <- c("LTB","IL7R", "SELL", "LEF1", "TCF7", "CCR7")
 feat_ctl <- c("NKG7", "PRF1", "GZMH", "GZMB", "GNLY")
 feat_mait <- c("SLC4A10", "TRAV1-2")
@@ -32,7 +96,7 @@ ggarrange(leg)
 dev.off()
 
 
-########## B: Density Plot #########
+##Density Plot
 gdat<-Embeddings(cd8, reduction = 'umap')
 gdat<-as.data.frame(gdat)
 gdat$type <- cd8$type
@@ -45,7 +109,7 @@ ggplot(data = gdat,aes(x = UMAP_1, y = UMAP_2)) +
 dev.off()
 
 
-########## C: Box Plot ##########
+#Box Plot
 
 sample_levels <- c("NLBM4", "NLBM5", "NLBM6", "PT1A",   "PT2A",   "PT3A",   "PT4A",
                    "PT5A",   "PT6A",   "PT7A",   "PT8A",   "PT9A",  "PT10A",  "PT11A",  "PT12A",  "PT13A",  "PT14A",
@@ -121,54 +185,88 @@ ctl_inf_box <- ctl_inf_box +stat_pvalue_manual(wilcox_sig_cd8, label="p.adj.sign
 
 cd8_box <- (naive_box + memory_box + plot_layout(ncol=2, widths=c(1,2))) / em_box / ctl_box / ctl_inf_box
 cd8_box <- cd8_box & xlab(NULL) & theme(axis.text.x = element_text(size=8, angle=60, hjust=1),
-                                                     axis.text.y = element_text(size=8))
+                                        axis.text.y = element_text(size=8))
 cd8_box <- cd8_box + plot_layout(guides="collect") & theme(legend.position = "top")
 pdf(paste0(file_prefix,"cd8_box_bh_scaled.pdf"), width=4, height=10)
 cd8_box & ylim(0,0.7)
 dev.off()
 
-########## D: Milo UMAP ##########
+#KIR gene expression
+pdf(paste0(file_prefix,"kir_expression.pdf"), width=4, height=10)
+dot_plot_x(cd8, c("KIR2DL1", "KIR2DL3", "KIR2DL4", "KIR3DL1", "KIR3DL2", "KIR3DL3",), group = "class13")
+dev.off()
 
-cd8_milo <- as.SingleCellExperiment(cd8)
-cd8_milo <- Milo(cd8_milo)
-cd8_milo <- buildGraph(cd8_milo, k = 20, d = 50)
-cd8_milo <- makeNhoods(cd8_milo, prop = 0.1, k = 20, d=50, refined = TRUE)
+#Regulatory Gene expression
+pdf(paste0(file_prefix,"reg_expression.pdf"), width=4, height=10)
+dot_plot_x(cd8, c("FOXP3", "ITGAE", "CD28", "IL2RB", "ITGA4", "IKZF2", "KIR3DL1", "KIR2DL3"), group = "class13")
+dev.off()
 
-#As a rule of thumb we want to have an average neighbourhood size over 5 x N_samples.
-#plotNhoodSizeHist(cd8_milo)
-cd8_milo <- countCells(cd8_milo, meta.data = data.frame(colData(cd8_milo)), sample="orig.ident")
-cd8_milo <- calcNhoodDistance(cd8_milo, d=50)
+#Downsampling
+cd8_newdx <- subset(cd8, subset = type %in% "NewlyDx")
+cd8_hr <- subset(cd8, subset = type %in% c("Healthy", "RelRef"))
+newdx_sample <- sample(colnames(cd8_newdx), size=4397)
 
-cd8_design <- data.frame(colData(cd8_milo))[,c("orig.ident", "type")]
-cd8_design$type <- as.factor(cd8_design$type)
-cd8_design <- distinct(cd8_design)
-rownames(cd8_design) <- c(cd8_design$orig.ident)
+cd8_sub <- subset(cd8_newdx, cells = newdx_sample)
+cd8_sub <- merge(cd8_sub, cd8_hr)
+cd8_sub <- analyze_seurat(cd8_sub)
 
-da_results <- testNhoods(cd8_milo, design = ~ type, design.df = cd8_design)
-da_results <- annotateNhoods(cd8_milo, da_results, coldata_col = "class13")
-da_results <- annotateNhoods(cd8_milo, da_results, coldata_col = "type")
-#ggplot(da_results, aes(type_fraction)) + geom_histogram(bins=50)
-da_results$type <- ifelse(da_results$type_fraction < 0.7, "Mixed", da_results$type)
-da_results$type <- factor(da_results$type, rev(c("Healthy", "NewlyDx", "Mixed", "RelRef")))
-da_results$class13 <- factor(da_results$class13, rev(c("N", "Mem1", "Mem2", "EM1", "EM2","INF1", "INF2",
-                                                       "CTL1", "CTL2", "CTL INF1", "CTL INF2", "CTL INF3", 
-                                                       "NK-like1", "NK-like2", "MAIT", "Ex")))
+pdf("./Figures/Additional/cd8_sample_umap_type.pdf", height=3, width=7)
+DimPlot(cd8_sub, group.by = "group", cols = anno_colors$group, split.by = "type") 
+dev.off()
 
-cd8_milo <- buildNhoodGraph(cd8_milo)
-milo <- plotNhoodGraphDA(cd8_milo, da_results, alpha=1,size_range=c(1,5)) + guides(edge_width="none")
-milo <- milo + guides(size=guide_legend(title="Neighborhood Size"))
+DimPlot(cd8_sub, group.by = "RNA_snn_res.1", label=T)
+dot_plot_x(cd8_sub, canonical_marker, group="RNA_snn_res.1")
+dot_plot_x(cd8_sub, feat_inf, group="RNA_snn_res.1")
 
-pdf(paste0(file_prefix,"milo_umap.pdf"), height=5, width=7)
-milo
+feat_naive <- c("LTB","IL7R", "SELL", "LEF1", "TCF7", "CCR7")
+feat_ctl <- c("NKG7", "PRF1", "GZMH", "GZMB", "GNLY")
+feat_mait <- c("SLC4A10", "TRAV1-2")
+feat_cd8 <- c("CX3CR1", "KLRG1", "FOSB", "CXCR4", "CD44", "EOMES", "GZMK")
+feat_cyt <- c("STAT1", "IFNG", "IFIT3", "TNF")
+feat_ex <- c("PDCD1", "TIGIT", "TOX","LAG3")
+cd8_dot <- group_dot_plot(cd8_sub, features=list(feat_naive, feat_ctl, feat_cd8,feat_cyt, feat_mait, feat_ex), 
+                          group = "RNA_snn_res.1")
+pdf("./Figures/Additional/cd8_subsample_dot_plot.pdf", height=8.25, width=4.25)
+ggarrange(cd8_dot)
 dev.off()
 
 
-########## E: Milo BeeSwarm ##########
-pdf(paste0(file_prefix,"milo_type_DAbeeswarm.pdf"), width = 4, height=1.5)
-plotDAbeeswarm(da_results, group.by = "type") + xlab(NULL) + ylab(NULL) +  theme(axis.text = element_text(size=10), axis.title = element_blank())
+#Correlation Plots
+expression_matrix <- FetchData(cd8, vars = c("CX3CR1", "CXCR4"))
+expression_matrix <- round(expression_matrix , 1)
+expression_matrix$class13 <- cd8$class13
+expression_matrix$type <- cd8$type
+expression_matrix$sample <- cd8$Patient
+
+#Gene Correlation
+ColAssign <- function(Var){
+  require(ggthemes);require(RColorBrewer)
+  pal <- tableau_color_pal(palette = "Classic 20",direction = 1,type="regular")
+  if (length(Var) > 20) {
+    palOut <- colorRampPalette(pal(20))(length(Var))
+    names(palOut) <- Var
+  } else if (length(Var) == 20) {
+    palOut <- pal(20)
+    names(palOut) <- Var
+  } else if (length(Var) < 20) {
+    palOut <- pal(20)
+    palOut <- setdiff(palOut,c("#7f7f7f","#c7c7c7"))# remove grey colors
+    #palOut <- sample(palOut)
+    palOut <- c(palOut,c("#7f7f7f","#c7c7c7"))
+    palOut <- palOut[1:length(Var)]
+    names(palOut) <- Var
+  }
+  return(palOut)
+}
+df <- expression_matrix %>% group_by(class13,type,.drop = FALSE) %>% summarise(CXCR4=mean(CXCR4),CX3CR1=mean(CX3CR1))
+table(df$type)
+palOut <- ColAssign(unique(df$class13))
+
+pdf(paste0(file_prefix,"CX3CR1_CXCR4_correlation.pdf"))
+ggplot(df, aes(y=CX3CR1, x=CXCR4,shape=type)) + geom_point(aes(size=2,color=class13))+
+  geom_smooth(se=FALSE,method = lm, linetype="dashed", size=0.5) + scale_color_manual(values=anno_colors$class13, name="Clusters")+ 
+  theme_classic() + stat_cor(label.x=1.5) + facet_wrap(.~type)
 dev.off()
 
-pdf(paste0(file_prefix,"milo_class13_beeswarm.pdf"), width = 4, height=4.5)
-plotDAbeeswarm(da_results, "class13") + xlab(NULL) + ylab(NULL) +  theme(axis.text = element_text(size=10), axis.title = element_blank())
-dev.off()
+cor.test(df$CX3CR1, df$CXCR4)
 

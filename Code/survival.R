@@ -1,6 +1,6 @@
 ############################################
 ## Project: CD8+ T-cell Analysis
-## Script Purpose: Code for Figure 5
+## Script Purpose: Code for Survival Analysis
 ## Date: 8/26/2022
 ## Author: Poonam Desai, Hussein Abbas, Bofei Wang
 ## Notes: 
@@ -10,8 +10,8 @@ library(GSVA); library(survminer); library(survival)
 library(Seurat); library(stringr)
 library(ComplexHeatmap)
 
-file_prefix <- ""
-source(paste0(file_prefix,"CD8_Functions.R"))
+file_prefix <- "~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/CD8_paper/"
+source(paste0(file_prefix,"Code/CD8_Functions.R"))
 cd8 <- readRDS(paste0(file_prefix,"cd8.rds"))
 
 cd8_derived_sig <- c("RPL41", "MTRNR2L12", "TXNIP", "CD2", "PRF1", "PSMB9", "LIMD2", "LTB", "GIMAP1", "GIMAP4", 
@@ -20,7 +20,7 @@ cd8_derived_sig <- c("RPL41", "MTRNR2L12", "TXNIP", "CD2", "PRF1", "PSMB9", "LIM
 
 ref_meta <- read.csv("~/Documents/T_cells/ssGSEA/BeatAML/MetaData_All_v4.csv", row.names = 1)
 
-########## Preliminary Analysis ##########
+#Preliminary Analysis
 tcga_meta<- ref_meta %>% filter(Cohort=="TCGA") %>% filter(Adult == TRUE) %>% 
   filter(Healthy_Disease == "D" & At_Diagnosis != FALSE)  %>%
   filter(FAB_Simple != "M3")
@@ -41,7 +41,7 @@ cancer_gene_exp <- t(scale(cancer_gene_exp))
 gsva_es <- gsva(cancer_gene_exp, list("Score" = cd8_derived_sig, "CD8A-norm" =  cd8_sig2), method="ssgsea")
 
 
-########## A/B: Correlation & Heatmap ##########
+#Correlation & Heatmap
 
 score_frame <- data.frame(gsva_es)
 score_frame <- score_frame["Score",]
@@ -72,7 +72,7 @@ corrplot(C, tl.cex = 0.5, tl.col="black", col=colorRampPalette(c("blue","white",
 dev.off()
 
 
-########## C: TCGA Survival ##########
+#TCGA Survival
 
 tcga_meta$score <- gsva_es["Score",]
 tcga_meta$score_norm <- gsva_es["CD8A-norm",]
@@ -102,10 +102,11 @@ dev.off()
 coxph(Surv(OS.time2, OS==1) ~ dys2, data = tcga_meta)
 
 
-######### D: Multivariate Analysis ##########
+# Multivariate Analysis
 
 tcga_meta$age_group <- ifelse(tcga_meta$Age > 60, "Greater", "Less")
 tcga_meta$age_group <- factor(tcga_meta$age_group, levels=c("Less", "Greater"))
+#cancer_survival$cyto.risk <- tcga_meta[match(cancer_survival$bcr_patient_barcode, tcga_meta$Sample)]
 tcga_meta$Cytogenetic_risk_incomplete=factor(tcga_meta$Cytogenetic_risk_incomplete,levels = c("Favorable","Intermediate","Unfavorable" ))
 
 covariate_names <- c(`age_group:Greater` ="Age > 60", Cytogenetic_risk_incomplete="Risk Level", dys_norm="CD8-Derived Score", 
@@ -126,7 +127,7 @@ forest_plot(result,
             HR_x_breaks = c(0.25, 0.5, 0.75, 1, 1.5, 2))
 
 
-########### E: Hazard Ratio Plot ##########
+#Hazard Ratio Plot
 
 library(phenoTest)
 
@@ -155,7 +156,7 @@ dev.off()
 cp <- coxph(Surv(OS.time2, OS==1) ~ dysfunction, data = pData(exp_set))
 summary(cp)
 
-########## F: HLA gene correlation ##########
+#HLA gene correlation
 
 hla=list()
 hla$hla1=c("B2M","HLA-A","HLA-B","HLA-C");hla$hla2=c("HLA-DMB","HLA-DMA","HLA-DRB1","HLA-DPA1","HLA-DRA","HLA-DPB1")
@@ -176,3 +177,35 @@ ggscatter(tcga_meta, x="dys_norm", y="hla1_ssgsea_score",add="reg.line",conf.int
         axis.ticks = element_blank()) 
 dev.off()
 
+#Abbas Survival Analysis
+abbas_meta<- ref_meta %>% filter(Cohort=="Abbas") %>% filter(Adult == TRUE) %>% 
+  filter(Healthy_Disease == "D" & At_Diagnosis != FALSE)  %>%
+  filter(FAB_Simple != "M3" & FAB_Simple != "M6" & FAB_Simple != "M7")
+
+ac <- read.csv("~/OneDrive - Inside MD Anderson/LabMembers/Resources/BulkRNA/AML_logTPM/Abbas_logTPM.csv")
+colnames(ac) <- colnames(ac) %>% str_replace_all("\\.","-") %>% str_replace_all("X","")
+rownames(ac) <- ac$Genes
+abbas_TPM <- ac
+
+
+ac <- t(ac)
+ac <- ac/ac[,"CD8A"]
+abbas_counts_scaled <- t(scale(ac))
+ac <- abbas_TPM[,abbas_meta$Sample]
+abbas_counts_scaled <- t(scale(t(ac)))
+keep <- apply(abbas_counts_scaled, 1, function(x) length(unique(x)) != 1) #removes anything that had constant expression
+abbas_counts_scaled <- abbas_counts_scaled[keep, ]
+gsva_es <- gsva(abbas_counts_scaled, list(dysfunction_signature),method="ssgsea",abs.ranking=F)
+abbas_meta$dysfunction <- t(gsva_es)
+abbas_meta$dys <- ifelse(t(gsva_es)> as.numeric(quantile(t(gsva_es),probs=0.5)), 1,0)
+split.exp=as.numeric(quantile(abbas_meta$dysfunction,probs=0.5, na.rm=TRUE))
+#gene.cox <- coxph(Surv(OS.time, OS == 1) ~ escore < split.exp, abbas_meta,x=TRUE)
+#hr1 <- smoothHR(data=phei, coxfit=gene.cox)
+#plot(hr1, predictor="gene.expi", prob=0, conf.level=0.95)
+fit=survfit(Surv(OS_days,Dead_Alive == "Dead") ~ dysfunction < split.exp, abbas_meta)
+
+pdf("~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/Figures/Additional/abbas_survival.pdf")
+ggsurvplot(fit,data=abbas_meta,pval = T,legend.labs = c("High Score", "Low Score"), xlab= "Time (days)",
+           pval.coord = c(4000,0.15), legend=c(0.7,0.9), legend.title="", title="Abbas AML Data Survival Probability",
+           risk.table = TRUE, conf.int = TRUE)
+dev.off()

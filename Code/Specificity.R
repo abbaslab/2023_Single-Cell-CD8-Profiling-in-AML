@@ -1,6 +1,6 @@
 ############################################
 ## Project: CD8+ T-cell Analysis
-## Script Purpose: Code for Figure 7
+## Script Purpose: Code for Specificity Analysis
 ## Date: 3/2/2023
 ## Author: Poonam Desai, Andre Faustino
 ## Notes: 
@@ -13,11 +13,12 @@ library(ggplot2); library(dplyr)
 library(patchwork); library(UpSetR)
 library(scRepertoire)
 
-setwd("~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/")
-source("CD8_Functions.R")
-cd8 <- readRDS("./CD8_paper/20220912_cd8.rds")
+file_prefix <- "~/OneDrive - Inside MD Anderson/LabMembers/Poonam/Grants_Manuscripts/Manuscripts/CD8_paper/"
 
-########## Preliminary Analysis ##########
+source(paste0(file_prefix,"Code/CD8_Functions.R"))
+cd8 <- readRDS(file_prefix,"cd8.rds")
+
+#Preliminary Analysis
 
 gliph <- read.table(file="~/Downloads/antigen_specificity/gliph_poonam_members_annotated.tsv", sep = "\t", header=T)
 rownames(gliph) <- gliph$sample_id
@@ -54,7 +55,7 @@ gliph_dt_sum <- data.frame(gliph_dt) %>%
   group_by(group_umap, class13) %>%
   dplyr::summarise(median_clonotypes = median(Freq))
 
-########## A: Clonotype Specificity ##########
+#Clonotype Specificity
 
 gliph_cluster_ann <- read_tsv(file = '~/Downloads/antigen_specificity/gliph_cluster_ann.tsv')
 gliph_members_ann_summarize<- read_tsv(file = "~/Downloads/antigen_specificity/gliph_members_annotated.tsv")
@@ -118,7 +119,7 @@ p1/p2 +
 dev.off()
 
 
-########## B: Clonotypes by Cell Type##########
+#Clonotypes by Cell Type
 
 t <- table(cd8$group, cd8$group_umap)
 t <- as.data.frame(t)
@@ -135,7 +136,7 @@ ggbarplot(t, x="Var1", y="Freq", fill="Var2", color="Var2") + scale_color_manual
   stat_compare_means()
 dev.off()
 
-########## C: Clonotypes by Expansion ##########
+#Clonotypes by Expansion
 
 t <- table(cd8$cloneType, cd8$group_umap)
 t <- as.data.frame(t)
@@ -172,7 +173,7 @@ gliph_cdr3_ann_summarise <- gliph_cdr3_ann_summarise %>%
 
 categories <- unique(gliph_cdr3_ann_summarise$group_umap)
 
-#
+#Upset plot
 
 pdf("./Figures/Additional/tcr_upset.pdf", width=7, height=9)
 UpSetR::upset(
@@ -231,8 +232,7 @@ ggplot(gliph_cdr3_shareability, aes(x = is_shared, y = n_cases)) +
 dev.off()
 
 
-########## E: Clonotype Sharing RelRef ##########
-
+#Clonotype Sharing RelRef
 gliph_rr <- subset(gliph_poonam_members_ann_summarise, condition == "RelRef")
 
 gliph_rr_summarise <- gliph_rr %>%
@@ -296,8 +296,7 @@ UpSetR::upset(
 )
 dev.off()
 
-########## F: Clonotype Sharing NewDx ##########
-
+#Clonotype Sharing NewDx
 gliph_new <- subset(gliph_poonam_members_ann_summarise, condition == "RxNaive")
 
 gliph_new_summarise <- gliph_new %>%
@@ -397,4 +396,16 @@ UpSetR::upset(
            "group_umap", "Cancer-related"), color = "firebrick4", query.name = "Cancer-related", active = T)
   )
 )
+dev.off()
+
+t <- data.frame(cd8$class13, cd8$group_umap, cd8$type, cd8$group)
+colnames(t) <- c("class13", "group_umap", "type", "group")
+t <- t[complete.cases(t),]
+
+t2 <- t %>% dplyr::count(group,group_umap,type) %>% group_by(group,type) %>% dplyr::mutate(prop=prop.table(n))
+
+pdf("./Figures/Additional/spec_group_type.pdf", width=7, height=4)
+ggbarplot(t2, x="group", y="n", fill="group_umap", color="group_umap") + scale_color_manual(values = c("gold", "firebrick4","steelblue", gray(0.3))) +
+  scale_fill_manual(values = c("gold", "firebrick4","steelblue", gray(0.3)))+
+  theme(axis.text.x=element_text(angle=90)) + xlab(NULL) + ylab("Percent")+ scale_x_discrete(limits=c("N", "Mem", "EM", "CTL", "MAIT", "Ex"))  + facet_wrap(.~type)
 dev.off()
